@@ -17,8 +17,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ===== GOOGLE DRIVE CONFIG =====
-const DRIVE_API_KEY = "AIzaSyDhJCdx5SWH2nNikcg4mRMmdCiqyUy7m70"; 
-const DRIVE_FOLDER_ID = "1mXCyDCN6E6C7F0NRSo1veXRCUMe3Lpik"; 
+const DRIVE_API_KEY = "AIzaSyBS3_R-QolPsRYDtg3r2oQAywrqYd9amC4"; 
+const DRIVE_FOLDER_ID = "1gSVhMnuw4rQYtXZ8XgAThnG9FaESCVPR"; 
 const DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const STUDENTS_GROUP_LINK = "https://chat.whatsapp.com/DWDY0Fw7wod3WGeNVoaqRB";
 const COMMAND_PREFIX = "!";
