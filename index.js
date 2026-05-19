@@ -1,4 +1,4 @@
-﻿import makeWASocket, {
+import makeWASocket, {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
     DisconnectReason,
@@ -68,7 +68,7 @@ function buildMoreFilesHints(moreSubjects = [], termType) {
 
     return [
         "",
-        "More files chahiye hon to ye command bhejo:",
+        "Need more files? Send this command:",
         ...moreSubjects.map((subject) => `➡️ ${buildMoreFilesCommand(termType, subject)}`)
     ];
 }
@@ -106,17 +106,30 @@ function buildSupportFooter() {
     ].join("\n");
 }
 
-function buildDeliveryReport({ type, subject, totalSent, moreSubjects = [], termType }) {
+function getMentionTag(jid = "") {
+    return jid ? `@${jid.split("@")[0]}` : "";
+}
+
+function getReportMentions(mentionJid) {
+    return mentionJid ? [mentionJid] : [];
+}
+
+function buildRequesterLine(requestedBy) {
+    return requestedBy ? [`👤  Requested By: *${requestedBy}*`] : [];
+}
+
+function buildDeliveryReport({ type, subject, totalSent, moreSubjects = [], termType, requestedBy }) {
     return [
         "╭─〔 *DELIVERY REPORT* 〕",
         "",
         "✅  Status: *Delivered*",
+        ...buildRequesterLine(requestedBy),
         `📂  Type: *${type}*`,
         `📚  Subject: *${subject}*`,
         `📦  Total Sent: *${totalSent}*`,
         "",
-        "Files pohanch gayi ne, paaji.",
-        "Check kar lo, sab ready hai.",
+        "Your files have been delivered.",
+        "Please check them. Everything is ready.",
         ...buildMoreFilesHints(moreSubjects, termType),
         "",
         "╰────────────────",
@@ -124,48 +137,51 @@ function buildDeliveryReport({ type, subject, totalSent, moreSubjects = [], term
     ].join("\n");
 }
 
-function buildFileStatusReport({ type, subject }) {
+function buildFileStatusReport({ type, subject, requestedBy }) {
     return [
         "╭─〔 *FILE STATUS* 〕",
         "",
-        "⛔  Status: *Not Available*",
+        "⛔  Status: *Not Delivered*",
+        ...buildRequesterLine(requestedBy),
         `📂  Type: *${type}*`,
         `📚  Subject: *${subject}*`,
         "",
-        "File abhi Drive mein upload nahi hui.",
-        "Jaldi add ho jaye gi, thora sabar karo.",
+        "This file is not uploaded to Drive yet.",
+        "It will be added soon. Please check back later.",
         "",
         "╰────────────────",
         buildSupportFooter()
     ].join("\n");
 }
 
-function buildHandoutsReport({ subject, totalSent }) {
+function buildHandoutsReport({ subject, totalSent, requestedBy }) {
     return [
         "╭─〔 *HANDOUTS DELIVERED* 〕",
         "",
         "✅  Status: *Delivered*",
+        ...buildRequesterLine(requestedBy),
         `📘  Subject: *${subject}*`,
         `📦  Handouts Sent: *${totalSent}*`,
         "",
-        "Handouts pohanch gaye ne, paaji.",
-        "Parhai shuru karo, scene set hai.",
+        "Your handouts have been delivered.",
+        "Please check them. Everything is ready.",
         "",
         "╰────────────────",
         buildSupportFooter()
     ].join("\n");
 }
 
-function buildNoMoreFilesReport({ type, subject }) {
+function buildNoMoreFilesReport({ type, subject, requestedBy }) {
     return [
         "╭─〔 *FILE STATUS* 〕",
         "",
         "✅  Status: *Completed*",
+        ...buildRequesterLine(requestedBy),
         `📂  Type: *${type}*`,
         `📚  Subject: *${subject}*`,
         "",
-        "Is subject ki aur files available nahi hain.",
-        "Jo files thi woh send ho chuki hain.",
+        "No more files are available for this subject.",
+        "All available files have already been sent.",
         "",
         "╰────────────────",
         buildSupportFooter()
@@ -176,7 +192,7 @@ function buildMoreFilesNeedDetailsReport() {
     return [
         "╭─〔 *MORE FILES* 〕",
         "",
-        "Command mein term aur subject bhi likho.",
+        "Please include the term and subject in the command.",
         "",
         `Example: *${buildMoreFilesCommand("mid", "CS101")}*`,
         `Example: *${buildMoreFilesCommand("final", "CS101")}*`,
@@ -186,15 +202,16 @@ function buildMoreFilesNeedDetailsReport() {
     ].join("\n");
 }
 
-function buildHandoutsStatusReport({ subject }) {
+function buildHandoutsStatusReport({ subject, requestedBy }) {
     return [
         "╭─〔 *HANDOUTS STATUS* 〕",
         "",
-        "⛔  Status: *Not Available*",
+        "⛔  Status: *Not Delivered*",
+        ...buildRequesterLine(requestedBy),
         `📘  Subject: *${subject}*`,
         "",
-        "Handouts abhi Drive mein upload nahi hue.",
-        "Jaldi add ho jaye ge, thora sabar karo.",
+        "Handouts are not uploaded to Drive yet.",
+        "They will be added soon. Please check back later.",
         "",
         "╰────────────────",
         buildSupportFooter()
@@ -295,20 +312,25 @@ async function findTermSubjectFiles(termType, subject) {
     return files;
 }
 
+function isPdfFile(file) {
+    return file?.mimeType === "application/pdf" || /\.pdf$/i.test(file?.name || "");
+}
+
 async function findHandouts(subject) {
     try {
         const res = await listDriveChildren(DRIVE_FOLDER_ID, [
             `mimeType != '${DRIVE_FOLDER_MIME_TYPE}'`,
             `name contains '${escapeDriveQueryValue(subject)}'`
         ]);
+        const pdfFiles = res.filter(isPdfFile);
 
-        console.log("Drive Response:", res);
+        console.log("Drive Response:", pdfFiles);
 
-        return res[0] || null;
+        return pdfFiles;
 
     } catch (err) {
         console.log("Drive Error:", err);
-        return null;
+        return [];
     }
 }
 
@@ -381,6 +403,9 @@ async function startBot() {
             const normalizedText = text.trim();
             const lowerText = normalizedText.toLowerCase();
             const textWithoutUrls = lowerText.replace(/https?:\/\/\S+/g, " ");
+            const requesterJid = jidNormalizedUser(msg.key.participant || sender);
+            const requesterMention = getMentionTag(requesterJid);
+            const reportMentions = getReportMentions(requesterJid);
             console.log("MSG:", normalizedText);
 
             // ===== TERM FILES / HANDOUTS =====
@@ -389,7 +414,10 @@ async function startBot() {
                 const termType = detectTermType(lowerText);
                 const wantsHandouts = /\b(handouts?|highlight(?:ed|s)?\s*handouts?|bookan|kitaaban|kitaban)\b/i.test(textWithoutUrls);
                 const wantsMoreFiles = isMoreFilesRequest(lowerText);
-                const wantsFiles = !wantsHandouts && (wantsMoreFiles || /\b(files?|send)\b/i.test(lowerText));
+                const wantsFiles =
+                    wantsMoreFiles ||
+                    /\bfiles?\b/i.test(lowerText) ||
+                    (!wantsHandouts && /\bsend\b/i.test(lowerText));
                 debugTermFiles("incomingTermRequestCheck", {
                     text: normalizedText,
                     termType,
@@ -403,7 +431,9 @@ async function startBot() {
                     await sock.sendMessage(sender, {
                         text: buildMoreFilesNeedDetailsReport()
                     });
-                    return;
+                    if (!wantsHandouts) {
+                        return;
+                    }
                 }
 
                 if (termType && subjectCodes.length > 0 && wantsFiles) {
@@ -492,23 +522,30 @@ async function startBot() {
                                 subject: subjectLabel,
                                 totalSent,
                                 moreSubjects,
-                                termType
-                            })
+                                termType,
+                                requestedBy: requesterMention
+                            }),
+                            mentions: reportMentions
                         });
                     } else {
                         await sock.sendMessage(sender, {
                             text: wantsMoreFiles
                                 ? buildNoMoreFilesReport({
                                     type: reportType,
-                                    subject: unavailableSubjects.join(", ") || subjectLabel
+                                    subject: unavailableSubjects.join(", ") || subjectLabel,
+                                    requestedBy: requesterMention
                                 })
                                 : buildFileStatusReport({
                                     type: reportType,
-                                    subject: unavailableSubjects.join(", ") || subjectLabel
-                                })
+                                    subject: unavailableSubjects.join(", ") || subjectLabel,
+                                    requestedBy: requesterMention
+                                }),
+                            mentions: reportMentions
                         });
                     }
-                    return;
+                    if (!wantsHandouts) {
+                        return;
+                    }
                 }
 
                 if (wantsHandouts) {
@@ -523,18 +560,20 @@ async function startBot() {
                     for (const subject of subjectCodes) {
                         console.log("Searching handout:", subject);
 
-                        const file = await findHandouts(subject);
-                        console.log("Result:", file);
+                        const files = await findHandouts(subject);
+                        console.log("Result:", files);
 
-                        if (file && file.id) {
+                        if (files.length > 0) {
                             foundAnyFile = true;
-                            const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
-                            await sock.sendMessage(sender, {
-                                document: { url: downloadUrl },
-                                mimetype: file.mimeType,
-                                fileName: file.name
-                            });
-                            totalSent += 1;
+                            for (const file of files) {
+                                const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                                await sock.sendMessage(sender, {
+                                    document: { url: downloadUrl },
+                                    mimetype: file.mimeType,
+                                    fileName: file.name
+                                });
+                                totalSent += 1;
+                            }
                         } else {
                             unavailableSubjects.push(subject);
                         }
@@ -544,14 +583,18 @@ async function startBot() {
                         await sock.sendMessage(sender, {
                             text: buildHandoutsReport({
                                 subject: subjectLabel,
-                                totalSent
-                            })
+                                totalSent,
+                                requestedBy: requesterMention
+                            }),
+                            mentions: reportMentions
                         });
                     } else {
                         await sock.sendMessage(sender, {
                             text: buildHandoutsStatusReport({
-                                subject: unavailableSubjects.join(", ") || subjectLabel
-                            })
+                                subject: unavailableSubjects.join(", ") || subjectLabel,
+                                requestedBy: requesterMention
+                            }),
+                            mentions: reportMentions
                         });
                     }
                     return;
@@ -559,7 +602,7 @@ async function startBot() {
             } catch (err) {
                 console.log("File Request Error:", err);
                 await sock.sendMessage(sender, {
-                    text: "âš ï¸ Oops! Something went wrong while fetching your files. Please try again later."
+                    text: "Oops! Something went wrong while fetching your files. Please try again later."
                 });
             }
 
